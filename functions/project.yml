@@ -1,0 +1,14 @@
+packages:
+  - name: emails
+    shared: false
+    environment:
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      FROM_EMAIL: ${FROM_EMAIL}
+      RECIPIENT_LIST: ${RECIPIENT_LIST}
+    functions:
+      - name: send-contact
+        runtime: nodejs:18
+        web: true
+        limits:
+          timeout: 10000
+          memory: 256

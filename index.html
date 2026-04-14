@@ -769,26 +769,26 @@
                 <form id="quote-form" class="space-y-6" novalidate>
                     <div class="grid md:grid-cols-2 gap-5">
                         <div><label class="block text-gray-700 font-medium mb-2">Tipo de servicio *</label>
-                        <select required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
+                        <select name="servicio" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-accent focus:border-transparent">
                             <option value="">Selecciona una opción</option>
                             <option>Bodega a largo plazo</option>
                             <option>Patio de resguardo temporal</option>
                             <option>Ambos (solución integral)</option>
                         </select></div>
                         <div><label class="block text-gray-700 font-medium mb-2">Metros cuadrados / Pallets *</label>
-                        <input type="text" required placeholder="Ej: 200 m² / 15 pallets" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-accent"></div>
+                        <input type="text" name="metros" required placeholder="Ej: 200 m² / 15 pallets" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-accent"></div>
                     </div>
                     <div class="grid md:grid-cols-2 gap-5">
                         <div><label class="block text-gray-700 font-medium mb-2">Nombre completo *</label>
-                        <input type="text" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-accent"></div>
+                        <input type="text" name="nombre" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-accent"></div>
                         <div><label class="block text-gray-700 font-medium mb-2">Empresa *</label>
-                        <input type="text" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-accent"></div>
+                        <input type="text" name="empresa" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-accent"></div>
                     </div>
                     <div class="grid md:grid-cols-2 gap-5">
                         <div><label class="block text-gray-700 font-medium mb-2">Email *</label>
-                        <input type="email" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-accent"></div>
+                        <input type="email" name="email" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-accent"></div>
                         <div><label class="block text-gray-700 font-medium mb-2">Teléfono *</label>
-                        <input type="tel" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-accent"></div>
+                        <input type="tel" name="telefono" required class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-accent"></div>
                     </div>
                     <button type="submit" class="btn-primary w-full text-white font-bold py-4 rounded-lg text-lg shadow-md transition">
                         <i class="fas fa-file-invoice-dollar mr-2"></i> Recibir cotización
@@ -947,15 +947,21 @@
     })();
 
     // ============================================================
-    // FORMULARIO — validación frontend + mensaje de éxito
+    // FORMULARIO — validación + envío a DO Function (SendGrid)
     // ============================================================
     (function () {
+        // URL de la DO Function. Actualiza este valor después del deploy:
+        // doctl serverless deploy functions --remote-build
+        // doctl serverless function get emails/send-contact --url
+        const FUNCTION_URL = 'REEMPLAZA_CON_TU_URL_DE_DO_FUNCTION';
+
         const form = document.getElementById('quote-form');
         if (!form) return;
 
-        form.addEventListener('submit', function (e) {
+        form.addEventListener('submit', async function (e) {
             e.preventDefault();
 
+            // — Validación —
             const required = form.querySelectorAll('[required]');
             let valid = true;
 
@@ -982,16 +988,49 @@
                 return;
             }
 
+            // — Envío —
             const submitBtn  = form.querySelector('[type="submit"]');
             const successMsg = document.getElementById('form-success');
+            const errorMsg   = document.getElementById('form-error');
 
-            if (submitBtn) submitBtn.disabled = true;
-            form.style.opacity = '0.5';
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Enviando…';
 
-            setTimeout(function () {
+            const data = {
+                servicio:  form.querySelector('[name="servicio"]').value,
+                metros:    form.querySelector('[name="metros"]').value,
+                nombre:    form.querySelector('[name="nombre"]').value,
+                empresa:   form.querySelector('[name="empresa"]').value,
+                email:     form.querySelector('[name="email"]').value,
+                telefono:  form.querySelector('[name="telefono"]').value,
+            };
+
+            try {
+                const res = await fetch(FUNCTION_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data),
+                });
+
+                if (!res.ok) {
+                    const body = await res.json().catch(() => ({}));
+                    throw new Error(body.error || 'Error al enviar');
+                }
+
                 form.style.display = 'none';
                 if (successMsg) successMsg.classList.remove('hidden');
-            }, 600);
+
+            } catch (err) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-file-invoice-dollar mr-2"></i> Recibir cotización';
+                if (errorMsg) {
+                    errorMsg.querySelector('span')
+                        ? errorMsg.querySelector('span').textContent = err.message
+                        : errorMsg.textContent = err.message;
+                    errorMsg.classList.remove('hidden');
+                    setTimeout(function () { errorMsg.classList.add('hidden'); }, 5000);
+                }
+            }
         });
     })();
 
