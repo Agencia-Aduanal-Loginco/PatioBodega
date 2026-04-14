@@ -1,24 +1,41 @@
 'use strict';
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Content-Type': 'application/json',
-};
+const ALLOWED_ORIGINS = [
+  'https://bodega-patio.loginco.com.mx',
+];
 
-function ok(data) {
-  return { statusCode: 200, headers: CORS_HEADERS, body: JSON.stringify(data) };
+function getCorsHeaders(origin) {
+  const allowed = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+  return {
+    'Access-Control-Allow-Origin': allowed,
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Vary': 'Origin',
+  };
 }
 
-function fail(status, message) {
-  return { statusCode: status, headers: CORS_HEADERS, body: JSON.stringify({ error: message }) };
+function ok(origin, data) {
+  return {
+    statusCode: 200,
+    headers: { ...getCorsHeaders(origin), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  };
+}
+
+function fail(origin, status, message) {
+  return {
+    statusCode: status,
+    headers: { ...getCorsHeaders(origin), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ error: message }),
+  };
 }
 
 async function main(args) {
+  const origin = (args.__ow_headers && args.__ow_headers['origin']) || '';
+
   // Preflight CORS
   if (args.__ow_method === 'options') {
-    return { statusCode: 200, headers: CORS_HEADERS, body: '' };
+    return { statusCode: 204, headers: getCorsHeaders(origin), body: '' };
   }
 
   // DO Functions envía el body como base64 cuando Content-Type es application/json
@@ -29,17 +46,17 @@ async function main(args) {
       : JSON.stringify(args);
     payload = JSON.parse(raw);
   } catch {
-    return fail(400, 'Cuerpo de la petición inválido.');
+    return fail(origin, 400, 'Cuerpo de la petición inválido.');
   }
 
   const { servicio, metros, nombre, empresa, email, telefono } = payload;
 
   if (!servicio || !nombre || !empresa || !email || !telefono) {
-    return fail(422, 'Todos los campos marcados con * son obligatorios.');
+    return fail(origin, 422, 'Todos los campos marcados con * son obligatorios.');
   }
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return fail(422, 'El correo electrónico no es válido.');
+    return fail(origin, 422, 'El correo electrónico no es válido.');
   }
 
   const apiKey = process.env.SENDGRID_API_KEY;
@@ -50,7 +67,7 @@ async function main(args) {
     .filter(Boolean);
 
   if (!apiKey) {
-    return fail(500, 'Configuración del servidor incompleta.');
+    return fail(origin, 500, 'Configuración del servidor incompleta.');
   }
 
   const htmlBody = `
@@ -95,10 +112,10 @@ async function main(args) {
   if (!response.ok) {
     const detail = await response.text();
     console.error('SendGrid error:', response.status, detail);
-    return fail(502, 'No se pudo enviar el correo. Intenta de nuevo o contáctanos directamente.');
+    return fail(origin, 502, 'No se pudo enviar el correo. Intenta de nuevo o contáctanos directamente.');
   }
 
-  return ok({ sent: true });
+  return ok(origin, { sent: true });
 }
 
 module.exports = { main };
